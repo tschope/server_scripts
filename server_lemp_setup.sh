@@ -35,7 +35,8 @@ echo "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
 echo "Installing base tools..."
-sudo apt install -y software-properties-common curl gnupg2 ca-certificates lsb-release unzip
+sudo apt install -y build-essential build-essential libpcre3 libpcre3-dev zlib1g-dev libssl-dev \
+libxslt1-dev libgd-dev libgeoip-dev libmaxminddb-dev software-properties-common curl gnupg2 ca-certificates lsb-release unzip
 
 # Install MySQL
 echo "Installing MySQL..."
@@ -98,6 +99,10 @@ done
 echo "Setting PHP 8.3 as default CLI..."
 sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.3 83
 sudo update-alternatives --set php /usr/bin/php8.3
+
+# Set default branch for git
+echo "Setting default branch for git to main..."
+git config --global init.defaultBranch main
 
 # Install Composer
 echo "Installing Composer..."

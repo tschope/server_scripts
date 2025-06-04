@@ -69,8 +69,11 @@ sudo -u deployer bash <<EOF
   echo 'export NVM_DIR="\$HOME/.nvm"' >> ~/.bashrc
   echo '[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"' >> ~/.bashrc
 EOF
-
     echo "✅ NVM and Node.js installed for deployer."
+
+    # Set default branch for git
+    echo "Setting default branch for git to main..."
+    git config --global init.defaultBranch main
 fi
 
 # Create the bare repo
