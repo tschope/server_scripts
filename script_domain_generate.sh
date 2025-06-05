@@ -26,25 +26,23 @@ done
 
 MAIN_DOMAIN=${DOMAINS[0]}
 
-# Ask for webroot path
-read -p "Enter webroot subfolder [default: /public]: " WEBROOT
-WEBROOT=${WEBROOT:-/public}
-
 # Ask if this is a PM2 frontend application
 read -p "Is this a PM2 frontend application? [y/N]: " IS_PM2_APP
 IS_PM2_APP=${IS_PM2_APP:-n}
 
 # Ask for PM2 port if needed
 if [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
-  read -p "Enter PM2 application port [default: 3000]: " PM2_PORT
-  PM2_PORT=${PM2_PORT:-3000}
+  # Suggest next available port
+  NEXT_PORT=$(comm -23 <(seq 3000 3100) <(ss -tulpn | grep LISTEN | awk '{print $5}' | sed 's/.*://') | head -n1)
+  read -p "Enter PM2 application port [default: $NEXT_PORT]: " PM2_PORT
+  PM2_PORT=${PM2_PORT:-$NEXT_PORT}
 
   # Ask if this is a combined Laravel + Frontend setup
   read -p "Is this a combined Laravel API + Frontend setup? [y/N]: " IS_COMBINED
   IS_COMBINED=${IS_COMBINED:-n}
 
   if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
-    read -p "Enter frontend directory relative to web root [default: /frontend]: " FRONTEND_DIR
+    read -p "Enter frontend directory relative to root [default: /frontend]: " FRONTEND_DIR
     FRONTEND_DIR=${FRONTEND_DIR:-/frontend}
   fi
 fi
@@ -53,7 +51,7 @@ fi
 read -p "Enter base path for web root [default: /var/www]: " ROOT_BASE
 ROOT_BASE=${ROOT_BASE:-/var/www}
 ROOT_PATH="$ROOT_BASE/$MAIN_DOMAIN"
-FULL_PATH="$ROOT_PATH$WEBROOT"
+FULL_PATH="$ROOT_PATH/public"
 
 # If combined setup, set the frontend path
 if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
@@ -107,7 +105,7 @@ EOF
 if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
   sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
 
-    location /api {
+    location ^~ /api {
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
