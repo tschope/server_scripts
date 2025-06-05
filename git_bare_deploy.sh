@@ -128,23 +128,57 @@ cd "$WORK_TREE$FRONTEND_PATH"
 export NVM_DIR="/home/deployer/.nvm"
 [ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
 
-NODE_VERSION=""
+# Check if package.json exists
 if [ -f "package.json" ]; then
-  NODE_VERSION=\$(grep '"node":' package.json | head -n 1 | sed -E 's/.*"node": ?"([^"]+)".*/\1/')
-fi
+  echo "📦 package.json found. Setting up Node.js and building frontend..."
+  
+  # Get Node.js version from package.json if specified
+  NODE_VERSION=""
+  if grep -q '"node":' package.json; then
+    NODE_VERSION=$(grep '"node":' package.json | head -n 1 | sed -E 's/.*"node": ?"([^"]+)".*/\1/')
+  fi
 
-if [ -n "\$NODE_VERSION" ]; then
-  echo "📦 Installing Node.js version \$NODE_VERSION from package.json..."
-  nvm install "\$NODE_VERSION"
-  nvm use "\$NODE_VERSION"
+  # Install and use the specified Node.js version or default to LTS
+  if [ -n "$NODE_VERSION" ]; then
+    echo "🔧 Installing Node.js version $NODE_VERSION from package.json..."
+    nvm install "$NODE_VERSION"
+    nvm use "$NODE_VERSION"
+  else
+    echo "🔧 No Node.js version specified in package.json. Using default LTS."
+    nvm install --lts
+    nvm use --lts
+  fi
+
+  # Install dependencies and build
+  echo "📦 Installing dependencies..."
+  npm install
+  
+  # Run build script if it exists in package.json
+  if grep -q '"build":' package.json; then
+    echo "🔨 Building frontend..."
+    npm run build
+  else
+    echo "ℹ️ No build script found in package.json. Skipping build step."
+  fi
+
+  # Auto-restart via PM2 if config exists
+  if [ -f "pm2.config.js" ] || [ -f "ecosystem.config.js" ]; then
+    echo "🔁 Detected PM2 config file."
+
+    CONFIG_FILE="ecosystem.config.js"
+    [ -f "pm2.config.js" ] && CONFIG_FILE="pm2.config.js"
+
+    echo "🚀 Reloading app using PM2 config: $CONFIG_FILE"
+
+    # Try to reload, otherwise start
+    pm2 reload $CONFIG_FILE || pm2 start $CONFIG_FILE
+  else
+    echo "ℹ️ No PM2 config found. Skipping PM2 restart."
+  fi
 else
-  echo "📦 No Node.js version specified in package.json. Using default LTS."
-  nvm install --lts
-  nvm use --lts
+  echo "ℹ️ No package.json found. Skipping Node.js and frontend setup."
 fi
 
-npm install
-npm run build
 cd "$WORK_TREE"
 EOL
 fi
