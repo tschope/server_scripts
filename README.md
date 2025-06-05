@@ -89,19 +89,46 @@ sudo ./git_bare_deploy.sh
 3. Configures Git hooks for automatic deployment
 4. Sets up proper file permissions
 5. Provides instructions for adding the remote repository
+6. Automatically handles Node.js projects with `package.json`
+7. Supports PM2 for process management (if configured)
+
+### PM2 Configuration
+
+For Node.js applications that should run continuously, you can add a PM2 configuration file. The script supports both `pm2.config.js` and `ecosystem.config.js` formats. Here's an example `pm2.config.js`:
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'your-app-name',
+    script: 'app.js',  // or 'npm start' if using package.json scripts
+    instances: 'max',
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production',
+    }
+  }]
+};
+```
 
 ### Deploying Your Application
 
-After running the script, you'll get a command to add as a remote to your local repository. It will look like:
+1. Add the deployment remote (you'll get this after running the script):
+   ```bash
+   git remote add live ssh://deployer@your-server-ip/var/git-bare/your-domain.com.git
+   ```
 
-```bash
-git remote add live ssh://deployer@your-server-ip/var/git-bare/your-domain.com.git
-```
+2. Deploy your application:
+   ```bash
+   git push live main
+   ```
 
-Then deploy using:
-```bash
-git push live main
-```
+3. The deployment script will automatically:
+   - Install Node.js (version specified in package.json or latest LTS)
+   - Run `npm install`
+   - Execute `npm run build` if a build script exists
+   - Restart your PM2 process if a config file is found
 
 ## Best Practices
 
