@@ -120,16 +120,29 @@ php composer-setup.php --quiet
 rm composer-setup.php
 sudo mv composer.phar /usr/local/bin/composer
 
-# Install NVM + Node.js
-echo "Installing NVM and Node.js..."
+# Install Node.js and PM2
+echo "Installing Node.js and PM2..."
+# Add NodeSource repository for Node.js LTS
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+# Install Node.js
+sudo apt-get install -y nodejs
+# Install PM2 globally
+sudo npm install -g pm2
+# Set PM2 to start on boot
+sudo pm2 startup
+
+# Install NVM + Node.js (as fallback)
+echo "Installing NVM as fallback..."
 export NVM_DIR="$HOME/.nvm"
 if [ ! -d "$NVM_DIR" ]; then
   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 fi
 
 export NVM_DIR="$HOME/.nvm"
-source "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+# Install Node.js LTS using NVM as well (for user-specific versions)
 nvm install --lts
+# Make sure .bashrc is sourced to have NVM available in the current shell
 source ~/.bashrc
 
 # Setup UFW (firewall)
