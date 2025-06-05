@@ -30,11 +30,35 @@ MAIN_DOMAIN=${DOMAINS[0]}
 read -p "Enter webroot subfolder [default: /public]: " WEBROOT
 WEBROOT=${WEBROOT:-/public}
 
+# Ask if this is a PM2 frontend application
+read -p "Is this a PM2 frontend application? [y/N]: " IS_PM2_APP
+IS_PM2_APP=${IS_PM2_APP:-n}
+
+# Ask for PM2 port if needed
+if [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
+  read -p "Enter PM2 application port [default: 3000]: " PM2_PORT
+  PM2_PORT=${PM2_PORT:-3000}
+
+  # Ask if this is a combined Laravel + Frontend setup
+  read -p "Is this a combined Laravel API + Frontend setup? [y/N]: " IS_COMBINED
+  IS_COMBINED=${IS_COMBINED:-n}
+
+  if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
+    read -p "Enter frontend directory relative to web root [default: /frontend]: " FRONTEND_DIR
+    FRONTEND_DIR=${FRONTEND_DIR:-/frontend}
+  fi
+fi
+
 # Ask for Nginx root base
 read -p "Enter base path for web root [default: /var/www]: " ROOT_BASE
 ROOT_BASE=${ROOT_BASE:-/var/www}
 ROOT_PATH="$ROOT_BASE/$MAIN_DOMAIN"
 FULL_PATH="$ROOT_PATH$WEBROOT"
+
+# If combined setup, set the frontend path
+if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
+  FRONTEND_PATH="$ROOT_PATH$FRONTEND_DIR"
+fi
 
 # Create folder structure
 echo "Creating web root at $FULL_PATH..."
@@ -46,7 +70,9 @@ sudo chmod -R 755 "$ROOT_PATH"
 NGINX_CONF="/etc/nginx/sites-available/$MAIN_DOMAIN"
 
 echo "Creating Nginx configuration for $MAIN_DOMAIN..."
-sudo tee "$NGINX_CONF" > /dev/null <<EOL
+
+# Start writing base config
+sudo tee "$NGINX_CONF" > /dev/null <<EOF
 server {
     listen 80;
     listen [::]:80;
@@ -56,7 +82,6 @@ server {
     root $FULL_PATH;
     index index.php index.html index.htm;
 
-    #access_log /var/log/nginx/${MAIN_DOMAIN}_access.log;
     error_log /var/log/nginx/${MAIN_DOMAIN}_error.log;
 
     add_header X-Frame-Options "SAMEORIGIN";
@@ -64,33 +89,81 @@ server {
     add_header X-Content-Type-Options "nosniff";
 
     charset utf-8;
+EOF
 
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
+# Add PHP handler
+sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
 
-    # Prevent Direct Access To Protected Files
-    location ~ \.(env|log) {
-        deny all;
-    }
-
-    # Prevent Direct Access To Protected Folders
-    location ~ ^/(^app\$|bootstrap|config|database|overrides|resources|routes|storage|tests|artisan) {
-        deny all;
-    }
-
-    # Prevent Direct Access To modules/vendor Folders Except Assets
-    location ~ ^/(modules|vendor)\/(.*)\.((?!ico|gif|jpg|jpeg|png|js\b|css|less|sass|font|woff|woff2|eot|ttf|svg|xls|xlsx).)*\$ {
-        deny all;
-    }
-
-    # Pass PHP Scripts To FastCGI Server
     location ~ \.php\$ {
         fastcgi_split_path_info ^(.+\.php)(/.+)\$;
         fastcgi_pass unix:/var/run/php/php${PHP_VERSION}-fpm.sock;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         include fastcgi_params;
+    }
+EOF
+
+# Conditional frontend/backend setups
+if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
+  sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
+
+    location /api {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location / {
+        proxy_pass http://localhost:${PM2_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+    }
+EOF
+elif [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
+  sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
+
+    location / {
+        proxy_pass http://localhost:${PM2_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+    }
+EOF
+else
+  sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+EOF
+fi
+
+# Append security rules and close
+sudo tee -a "$NGINX_CONF" > /dev/null <<'EOF'
+
+    location ~ \.(env|log) {
+        deny all;
+    }
+
+    location ~ ^/(^app$|bootstrap|config|database|overrides|resources|routes|storage|tests|artisan) {
+        deny all;
+    }
+
+    location ~ ^/(modules|vendor)/(.*)\.((?!ico|gif|jpg|jpeg|png|js\b|css|less|sass|font|woff|woff2|eot|ttf|svg|xls|xlsx).)*$ {
+        deny all;
     }
 
     location ~ /\.(?!well-known).* {
@@ -101,7 +174,7 @@ server {
         deny all;
     }
 }
-EOL
+EOF
 
 # Enable site
 echo "Enabling site..."
