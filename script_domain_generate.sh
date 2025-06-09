@@ -65,6 +65,60 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
   echo "Creating initial deploy versioned path and symlink for Nginx to avoid syntax error..."
   sudo mkdir -p "$DEPLOYS_PATH/public"
   sudo ln -s "$DEPLOYS_PATH" "$CURRENT_PATH"
+
+  # Ask if rollback script should be created
+  read -p "Generate rollback.sh script to switch between versions? [y/N]: " CREATE_ROLLBACK
+  CREATE_ROLLBACK=${CREATE_ROLLBACK:-n}
+
+  if [[ "$CREATE_ROLLBACK" =~ ^[Yy]$ ]]; then
+    ROLLBACK_SCRIPT="$ROOT_PATH/rollback.sh"
+    cat <<'EOF' | sudo tee "$ROLLBACK_SCRIPT" > /dev/null
+#!/bin/bash
+
+set -e
+
+# Prompt user to select version from deploys
+DEPLOYS_DIR="$(dirname "$0")/deploys"
+CURRENT_LINK="$(dirname "$0")/current"
+
+if [ ! -d "$DEPLOYS_DIR" ]; then
+  echo "❌ No 'deploys' directory found at $DEPLOYS_DIR"
+  exit 1
+fi
+
+VERSIONS=($(ls -1 $DEPLOYS_DIR | sort -r))
+
+if [ ${#VERSIONS[@]} -eq 0 ]; then
+  echo "❌ No versions found in $DEPLOYS_DIR"
+  exit 1
+fi
+
+echo "Available versions for rollback:"
+select VERSION in "${VERSIONS[@]}"; do
+  if [[ -n "$VERSION" ]]; then
+    TARGET="$DEPLOYS_DIR/$VERSION"
+    if [ -d "$TARGET" ]; then
+      echo "Rolling back to: $VERSION"
+      rm -f "$CURRENT_LINK"
+      ln -s "$TARGET" "$CURRENT_LINK"
+      echo "✅ Rolled back to $VERSION"
+
+      echo "🔄 Restarting Nginx..."
+      sudo systemctl reload nginx && echo "✅ Nginx reloaded"
+
+      exit 0
+    else
+      echo "❌ Selected directory does not exist: $TARGET"
+    fi
+  else
+    echo "❌ Invalid selection."
+  fi
+  break
+done
+EOF
+    sudo chmod +x "$ROLLBACK_SCRIPT"
+    echo "✅ Rollback script created at: $ROLLBACK_SCRIPT"
+  fi
 else
   FULL_PATH="$ROOT_PATH/public"
 fi
