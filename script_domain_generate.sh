@@ -26,6 +26,10 @@ done
 
 MAIN_DOMAIN=${DOMAINS[0]}
 
+# Ask if versioning is required
+read -p "Enable deploy versioning with timestamped folders? [y/N]: " USE_VERSIONING
+USE_VERSIONING=${USE_VERSIONING:-n}
+
 # Ask if this is a PM2 frontend application
 read -p "Is this a PM2 frontend application? [y/N]: " IS_PM2_APP
 IS_PM2_APP=${IS_PM2_APP:-n}
@@ -51,7 +55,19 @@ fi
 read -p "Enter base path for web root [default: /var/www]: " ROOT_BASE
 ROOT_BASE=${ROOT_BASE:-/var/www}
 ROOT_PATH="$ROOT_BASE/$MAIN_DOMAIN"
-FULL_PATH="$ROOT_PATH/public"
+
+if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
+  TIMESTAMP=$(date +%Y%m%d%H%M%S)
+  DEPLOYS_PATH="$ROOT_PATH/deploys/$TIMESTAMP"
+  CURRENT_PATH="$ROOT_PATH/current"
+  FULL_PATH="$CURRENT_PATH/public"
+
+  echo "Creating initial deploy versioned path and symlink for Nginx to avoid syntax error..."
+  sudo mkdir -p "$DEPLOYS_PATH/public"
+  sudo ln -s "$DEPLOYS_PATH" "$CURRENT_PATH"
+else
+  FULL_PATH="$ROOT_PATH/public"
+fi
 
 # If combined setup, set the frontend path
 if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
@@ -160,7 +176,7 @@ sudo tee -a "$NGINX_CONF" > /dev/null <<'EOF'
         deny all;
     }
 
-    location ~ ^/(modules|vendor)/(.*)\.((?!ico|gif|jpg|jpeg|png|js\b|css|less|sass|font|woff|woff2|eot|ttf|svg|xls|xlsx).)*$ {
+    location ~ ^/(modules|vendor)/(.*)\.((?!ico|gif|jpg|jpeg|png|js\b|css|less|sass|font|woff|woff2|eot|ttf|svg|xls|xlsx).)*\$ {
         deny all;
     }
 
