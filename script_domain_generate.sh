@@ -254,7 +254,7 @@ sudo nginx -t && sudo service nginx reload
 
 # Issue Let's Encrypt certificates
 echo "Issuing Let's Encrypt certificate..."
-sudo certbot --nginx -d "${DOMAINS[@]}"
+sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")
 
 # Ask if user wants to create a MySQL database and user
 read -p "Do you want to create a MySQL database and user for this domain? [y/N]: " CREATE_DB
