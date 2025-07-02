@@ -179,6 +179,10 @@ if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
+    location ^~ /sanctum/csrf-cookie {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
     location / {
         proxy_pass http://localhost:${PM2_PORT};
         proxy_http_version 1.1;
@@ -208,6 +212,11 @@ elif [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
         proxy_cache_bypass \$http_upgrade;
         proxy_read_timeout 300;
         proxy_connect_timeout 300;
+        proxy_buffering off;
+        chunked_transfer_encoding off;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
 EOF
 else
