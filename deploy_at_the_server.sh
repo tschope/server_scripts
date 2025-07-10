@@ -5,6 +5,7 @@ echo "🚀 Deployment started ..."
 
 BASE_DIR="/var/www/domain.com"
 RELEASES_DIR="$BASE_DIR/releases"
+SHARED_DIR="$BASE_DIR/shared"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
 CURRENT_LINK="$BASE_DIR/current"
@@ -30,6 +31,12 @@ echo "📦 Installing composer dependencies"
 cd "$NEW_RELEASE"
 composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
+# Link shared storage folders (before any permission or artisan steps)
+echo "🔗 Linking shared storage"
+rm -rf "$NEW_RELEASE/storage"
+ln -sfn "$SHARED_DIR/storage" "$NEW_RELEASE/storage"
+ln -sfn "$SHARED_DIR/storage/app/public" "$NEW_RELEASE/public/storage"
+
 # Run migrations
 echo "🧬 Running migrations"
 php artisan migrate --force
@@ -43,7 +50,7 @@ cd ..
 
 # Fix folder permissions
 echo "🛠️   Fixing permissions"
-sudo chown -R www-data:www-data .
+sudo chown -R www-data:www-data "$SHARED_DIR/storage"
 sudo find storage -type d -exec chmod 775 {} \; || true
 sudo find storage -type f -exec chmod 664 {} \; || true
 

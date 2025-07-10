@@ -183,6 +183,14 @@ if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
+    location ^~ /storage/ {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ^~ /broadcasting {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
     location / {
         proxy_pass http://localhost:${PM2_PORT};
         proxy_http_version 1.1;
