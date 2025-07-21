@@ -73,6 +73,11 @@ if ! grep -q "include /etc/nginx/sites-enabled/\*;" "$NGINX_MAIN_CONF"; then
   echo "Added 'include /etc/nginx/sites-enabled/*;' to nginx.conf"
 fi
 
+# Set Nginx client_max_body_size
+echo "Updating Nginx default config to allow 25MB uploads..."
+sudo sed -i '/http {/a \\tclient_max_body_size 25M;' "$NGINX_MAIN_CONF"
+sudo systemctl reload nginx
+
 # Install Certbot
 echo "Installing Certbot..."
 sudo apt install -y certbot python3-certbot-nginx
@@ -84,21 +89,38 @@ sudo apt update
 
 # Install PHP versions and extensions
 PHP_VERSIONS=("7.4" "8.3" "8.4")
-PHP_PACKAGES=("cli" "fpm" "common" "mysql" "zip" "gd" "mbstring" "curl" "xml" "bcmath")
+PHP_PACKAGES=("cli" "fpm" "common" "mysql" "zip" "gd" "mbstring" "curl" "xml" "bcmath", "imagick")
 
+# Install PHP and extensions
+echo "Installing PHP versions and extensions..."
 for version in "${PHP_VERSIONS[@]}"; do
   echo "Installing PHP $version..."
   PACKAGE_LIST=""
   for package in "${PHP_PACKAGES[@]}"; do
-    PACKAGE_LIST+="php$version-$package "
+    PACKAGE_LIST+=" php$version-$package"
   done
   sudo apt install -y $PACKAGE_LIST
+	sudo phpenmod -v $version imagick || true
+	sudo systemctl restart php$version-fpm || true
+
+  # Set PHP upload limits
+  PHP_INI="/etc/php/$version/fpm/php.ini"
+  if [ -f "$PHP_INI" ]; then
+    sudo sed -i 's/^upload_max_filesize.*/upload_max_filesize = 25M/' "$PHP_INI"
+    sudo sed -i 's/^post_max_size.*/post_max_size = 25M/' "$PHP_INI"
+    sudo systemctl restart php$version-fpm || true
+  fi
+	sudo systemctl restart php$version-fpm || true
 done
 
 # Set PHP 8.3 as default CLI
 echo "Setting PHP 8.3 as default CLI..."
 sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.3 83
 sudo update-alternatives --set php /usr/bin/php8.3
+sudo update-alternatives --set phar /usr/bin/phar8.3
+sudo update-alternatives --set phar.phar /usr/bin/phar.phar8.3
+sudo update-alternatives --set phpize /usr/bin/phpize8.3
+sudo update-alternatives --set php-config /usr/bin/php-config8.3
 
 # Set default branch for git
 echo "Setting default branch for git to main..."
