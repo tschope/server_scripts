@@ -269,9 +269,20 @@ sudo ln -s "$NGINX_CONF" /etc/nginx/sites-enabled/
 echo "Testing Nginx configuration..."
 sudo nginx -t && sudo service nginx reload
 
-# Issue Let's Encrypt certificates
-echo "Issuing Let's Encrypt certificate..."
-sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")
+# Ask if user wants to configure HTTPS now
+read -p "Do you want to configure HTTPS (Let's Encrypt) now? [y/N]: " CONFIGURE_HTTPS
+CONFIGURE_HTTPS=${CONFIGURE_HTTPS:-n}
+
+if [[ "$CONFIGURE_HTTPS" =~ ^[Yy]$ ]]; then
+  # Issue Let's Encrypt certificates
+  echo "Issuing Let's Encrypt certificate..."
+  sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")
+else
+  echo "⚠️  HTTPS not configured. Your site is currently HTTP only."
+  echo "📝 To configure HTTPS later (after DNS propagation), run:"
+  echo "   sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")"
+  echo ""
+fi
 
 # Ask if user wants to create a MySQL database and user
 read -p "Do you want to create a MySQL database and user for this domain? [y/N]: " CREATE_DB
