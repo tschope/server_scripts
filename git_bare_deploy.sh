@@ -100,15 +100,16 @@ CURRENT_LINK="$WORK_TREE_BASE_FULL/current"
 if [ "$USE_VERSIONING" = "y" ] || [ "$USE_VERSIONING" = "Y" ]; then
   TIMESTAMP=\$(date +%Y%m%d%H%M%S)
   WORK_TREE="\$DEPLOYS_DIR/\$TIMESTAMP"
-  mkdir -p "\$WORK_TREE"
+  sudo mkdir -p "\$WORK_TREE"
 else
   WORK_TREE="$WORK_TREE_BASE_FULL"
 fi
 
-# Set permissions
+# Set permissions for deployer to write
 sudo chown -R deployer:deployer "\$WORK_TREE"
 
-git --work-tree=\$WORK_TREE --git-dir=$BARE_REPO_PATH checkout $DEPLOY_BRANCH -f
+sudo git --work-tree=\$WORK_TREE --git-dir=$BARE_REPO_PATH checkout $DEPLOY_BRANCH -f
+sudo chown -R deployer:deployer "\$WORK_TREE"
 
 cd \$WORK_TREE
 EOL
@@ -118,17 +119,17 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 
 # Symlink shared .env for versioned deploy
 echo "Linking shared .env..."
-ln -sfn "$WORK_TREE_BASE_FULL/.env" "\$WORK_TREE/.env"
+sudo ln -sfn "$WORK_TREE_BASE_FULL/.env" "\$WORK_TREE/.env"
 
 # Symlink shared storage for versioned deploy
 echo "Linking shared storage..."
 if [ ! -d "$WORK_TREE_BASE_FULL/storage" ]; then
   echo "Shared storage not found. Creating from this release..."
-  mv "\$WORK_TREE/storage" "$WORK_TREE_BASE_FULL/storage"
+  sudo mv "\$WORK_TREE/storage" "$WORK_TREE_BASE_FULL/storage"
 else
-  rm -rf "\$WORK_TREE/storage"
+  sudo rm -rf "\$WORK_TREE/storage"
 fi
-ln -sfn "$WORK_TREE_BASE_FULL/storage" "\$WORK_TREE/storage"
+sudo ln -sfn "$WORK_TREE_BASE_FULL/storage" "\$WORK_TREE/storage"
 EOL
 fi
 
@@ -201,7 +202,7 @@ fi
 
 # Link current to this release
 echo "Linking current -> \$WORK_TREE"
-ln -sfn "\$WORK_TREE" "$WORK_TREE_BASE_FULL/current"
+sudo ln -sfn "\$WORK_TREE" "$WORK_TREE_BASE_FULL/current"
 
 echo "Done!"
 EOL
