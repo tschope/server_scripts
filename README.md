@@ -22,7 +22,7 @@ This script performs the initial server setup, including:
 - SSH security configuration
 - Firewall setup (UFW)
 - LEMP stack installation (Linux, Nginx, MySQL, PHP)
-- Composer, Node.js, and Supervisor installation
+- Composer, Node.js, Redis (optional), and Supervisor (optional) installation
 
 ### Usage
 
@@ -37,13 +37,14 @@ sudo ./server_lemp_setup.sh
 3. Installs and configures:
    - Nginx web server
    - MySQL database server
-   - PHP 7.4, 8.2, 8.3, 8.4, 8.5 with common extensions
+   - PHP versions of your choice (available: 7.4, 8.2, 8.3, 8.4, 8.5) with Laravel-ready extensions (incl. intl, redis, imagick)
    - Composer (PHP package manager)
    - Node.js (via NodeSource + NVM as fallback)
-   - Supervisor (process manager)
+   - Redis server (optional)
+   - Supervisor process manager (optional)
    - Certbot (Let's Encrypt)
 4. Sets up basic firewall rules (SSH, HTTP, HTTPS)
-5. Sets PHP 8.3 as default CLI
+5. Sets your chosen PHP version as default CLI
 
 **Note:** The MySQL root password will be saved to `/root/mysql_root_password.txt`.
 

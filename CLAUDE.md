@@ -17,7 +17,7 @@ Collection of Bash shell scripts for provisioning and managing Ubuntu/Debian LEM
 
 | Script | Purpose |
 |---|---|
-| `server_lemp_setup.sh` | Full LEMP stack provisioning (SSH, UFW, Nginx, MySQL, PHP 7.4/8.2/8.3/8.4/8.5, Composer, Node.js/NVM, Supervisor, Certbot) |
+| `server_lemp_setup.sh` | Full LEMP stack provisioning (SSH, UFW, Nginx, MySQL, PHP 7.4/8.2/8.3/8.4/8.5, Composer, Node.js/NVM, optional Redis, optional Supervisor, Certbot) |
 | `script_domain_generate.sh` | Add a new domain: Nginx vhost, PHP-FPM, optional Supervisor proxy, Let's Encrypt SSL, MySQL database/user creation |
 | `git_bare_deploy.sh` | Create a bare Git repo with a `post-receive` hook for push-to-deploy (supports composer, artisan migrations, npm build, NVM, Supervisor, Horizon, Reverb, schedule:work, optional versioned deploys) |
 | `deploy_at_the_server.sh` | Concrete zero-downtime deploy script (clone, composer, artisan migrate, npm build, symlink swap, Supervisor restart, keeps last 3 releases) |
