@@ -88,7 +88,7 @@ sudo add-apt-repository ppa:ondrej/php -y
 sudo apt update
 
 # Install PHP versions and extensions
-PHP_VERSIONS=("7.4" "8.3" "8.4")
+PHP_VERSIONS=("7.4" "8.2" "8.3" "8.4" "8.5")
 PHP_PACKAGES=("cli" "fpm" "common" "mysql" "zip" "gd" "mbstring" "curl" "xml" "bcmath", "imagick")
 
 # Install PHP and extensions
@@ -142,16 +142,16 @@ php composer-setup.php --quiet
 rm composer-setup.php
 sudo mv composer.phar /usr/local/bin/composer
 
-# Install Node.js and PM2
-echo "Installing Node.js and PM2..."
+# Install Node.js and Supervisor
+echo "Installing Node.js and Supervisor..."
 # Add NodeSource repository for Node.js LTS
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 # Install Node.js
 sudo apt-get install -y nodejs
-# Install PM2 globally
-sudo npm install -g pm2
-# Set PM2 to start on boot
-sudo pm2 startup
+# Install Supervisor for process management
+sudo apt install -y supervisor
+sudo systemctl enable supervisor
+sudo systemctl start supervisor
 
 # Install NVM + Node.js (as fallback)
 echo "Installing NVM as fallback..."

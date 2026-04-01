@@ -58,11 +58,9 @@ sudo find storage -type f -exec chmod 664 {} \; || true
 echo "🔗 Updating current symlink"
 ln -sfn "$NEW_RELEASE" "$CURRENT_LINK"
 
-# Restart PM2 www application
-cd "$CURRENT_LINK/frontend"
-echo "🚀 Restarting PM2"
-sudo -u www-data pm2 del application_www
-sudo -u www-data pm2 startOrRestart "$BASE_DIR/ecosystem.config.cjs" --only application_www
+# Restart frontend via Supervisor
+echo "🚀 Restarting frontend via Supervisor"
+sudo supervisorctl restart domain-nuxt || echo "⚠️  Supervisor restart failed or process not found"
 
 # Restart Nginx to get the new release
 echo "🚀 Restarting Nginx"

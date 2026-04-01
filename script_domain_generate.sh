@@ -3,12 +3,12 @@
 set -e
 
 # Ask which PHP version will be used
-echo "Available PHP versions: 7.4, 8.3, 8.4"
+echo "Available PHP versions: 7.4, 8.2, 8.3, 8.4, 8.5"
 read -p "Enter PHP version to use [default: 8.3]: " PHP_VERSION
 PHP_VERSION=${PHP_VERSION:-8.3}
 
-if [[ "$PHP_VERSION" != "7.4" && "$PHP_VERSION" != "8.3" && "$PHP_VERSION" != "8.4" ]]; then
-  echo "❌ Invalid PHP version selected. Allowed values: 7.4, 8.3, 8.4"
+if [[ "$PHP_VERSION" != "7.4" && "$PHP_VERSION" != "8.2" && "$PHP_VERSION" != "8.3" && "$PHP_VERSION" != "8.4" && "$PHP_VERSION" != "8.5" ]]; then
+  echo "❌ Invalid PHP version selected. Allowed values: 7.4, 8.2, 8.3, 8.4, 8.5"
   exit 1
 fi
 
@@ -30,16 +30,16 @@ MAIN_DOMAIN=${DOMAINS[0]}
 read -p "Enable deploy versioning with timestamped folders? [y/N]: " USE_VERSIONING
 USE_VERSIONING=${USE_VERSIONING:-n}
 
-# Ask if this is a PM2 frontend application
-read -p "Is this a PM2 frontend application? [y/N]: " IS_PM2_APP
-IS_PM2_APP=${IS_PM2_APP:-n}
+# Ask if this is a Supervisor-managed frontend application
+read -p "Is this a Supervisor-managed frontend application? [y/N]: " IS_SUPERVISOR_APP
+IS_SUPERVISOR_APP=${IS_SUPERVISOR_APP:-n}
 
-# Ask for PM2 port if needed
-if [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
+# Ask for app port if needed
+if [[ "$IS_SUPERVISOR_APP" =~ ^[Yy]$ ]]; then
   # Suggest next available port
   NEXT_PORT=$(comm -23 <(seq 3000 3100) <(ss -tulpn | grep LISTEN | awk '{print $5}' | sed 's/.*://') | head -n1)
-  read -p "Enter PM2 application port [default: $NEXT_PORT]: " PM2_PORT
-  PM2_PORT=${PM2_PORT:-$NEXT_PORT}
+  read -p "Enter application port [default: $NEXT_PORT]: " APP_PORT
+  APP_PORT=${APP_PORT:-$NEXT_PORT}
 
   # Ask if this is a combined Laravel + Frontend setup
   read -p "Is this a combined Laravel API + Frontend setup? [y/N]: " IS_COMBINED
@@ -123,7 +123,6 @@ else
   FULL_PATH="$ROOT_PATH/public"
 fi
 
-# If combined setup, set the frontend path
 if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
   FRONTEND_PATH="$ROOT_PATH$FRONTEND_DIR"
 fi
@@ -192,7 +191,7 @@ if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
     }
 
     location / {
-        proxy_pass http://localhost:${PM2_PORT};
+        proxy_pass http://localhost:${APP_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -205,11 +204,11 @@ if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
         proxy_connect_timeout 300;
     }
 EOF
-elif [[ "$IS_PM2_APP" =~ ^[Yy]$ ]]; then
+elif [[ "$IS_SUPERVISOR_APP" =~ ^[Yy]$ ]]; then
   sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
 
     location / {
-        proxy_pass http://localhost:${PM2_PORT};
+        proxy_pass http://localhost:${APP_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
