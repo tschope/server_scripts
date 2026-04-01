@@ -204,6 +204,7 @@ sudo find "$WORK_TREE_BASE_FULL/storage" -type f -exec chmod 664 {} \; || true
 # Link current to this release
 echo "Linking current -> \$WORK_TREE"
 sudo ln -sfn "\$WORK_TREE" "$WORK_TREE_BASE_FULL/current"
+sudo chown -h www-data:www-data "$WORK_TREE_BASE_FULL/current"
 
 # Clean up old releases (keep last 3)
 echo "Cleaning up old releases (keeping last 3)..."
