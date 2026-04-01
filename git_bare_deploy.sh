@@ -113,6 +113,25 @@ git --work-tree=\$WORK_TREE --git-dir=$BARE_REPO_PATH checkout $DEPLOY_BRANCH -f
 cd \$WORK_TREE
 EOL
 
+if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+
+# Symlink shared .env for versioned deploy
+echo "Linking shared .env..."
+ln -sfn "$WORK_TREE_BASE_FULL/.env" "\$WORK_TREE/.env"
+
+# Symlink shared storage for versioned deploy
+echo "Linking shared storage..."
+if [ ! -d "$WORK_TREE_BASE_FULL/storage" ]; then
+  echo "Shared storage not found. Creating from this release..."
+  mv "\$WORK_TREE/storage" "$WORK_TREE_BASE_FULL/storage"
+else
+  rm -rf "\$WORK_TREE/storage"
+fi
+ln -sfn "$WORK_TREE_BASE_FULL/storage" "\$WORK_TREE/storage"
+EOL
+fi
+
 if [[ "$COMPOSER_INSTALL" =~ ^[Yy]$ ]]; then
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 echo "Running composer install..."
@@ -156,33 +175,46 @@ cd "\$WORK_TREE"
 EOL
 fi
 
-sudo tee -a "$HOOK_PATH" > /dev/null <<'EOL'
+sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
 # Adjust permissions
 echo "Fixing permissions for www-data..."
-sudo chown -R www-data:www-data $WORK_TREE
+sudo chown -R www-data:www-data "\$WORK_TREE"
 
 echo "Adjusting folder permissions..."
-if [ -d "$WORK_TREE/public" ]; then
-  find "$WORK_TREE/public" -type d -exec sudo chmod 755 {} \;
+if [ -d "\$WORK_TREE/public" ]; then
+  find "\$WORK_TREE/public" -type d -exec sudo chmod 755 {} \;
 fi
 
-if [ -d "$WORK_TREE/storage" ]; then
-  sudo chmod -R ug+rwx "$WORK_TREE/storage"
+if [ -d "\$WORK_TREE/bootstrap/cache" ]; then
+  sudo chmod -R ug+rwx "\$WORK_TREE/bootstrap/cache"
+fi
+EOL
+
+if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+
+# Shared storage permissions
+if [ -d "$WORK_TREE_BASE_FULL/storage" ]; then
+  sudo chmod -R ug+rwx "$WORK_TREE_BASE_FULL/storage"
 fi
 
-if [ -d "$WORK_TREE/bootstrap/cache" ]; then
-  sudo chmod -R ug+rwx "$WORK_TREE/bootstrap/cache"
-fi
+# Link current to this release
+echo "Linking current -> \$WORK_TREE"
+ln -sfn "\$WORK_TREE" "$WORK_TREE_BASE_FULL/current"
 
-# Link to current if versioning
-if [ "$USE_VERSIONING" = "y" ] || [ "$USE_VERSIONING" = "Y" ]; then
-  echo "Linking current -> $WORK_TREE"
-  ln -sfn "$WORK_TREE" "$CURRENT_LINK"
+echo "Done!"
+EOL
+else
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+
+if [ -d "\$WORK_TREE/storage" ]; then
+  sudo chmod -R ug+rwx "\$WORK_TREE/storage"
 fi
 
 echo "Done!"
 EOL
+fi
 
 # Make hook executable
 sudo chmod +x "$HOOK_PATH"
