@@ -184,7 +184,7 @@ sudo chown -R www-data:www-data "\$WORK_TREE"
 
 echo "Adjusting folder permissions..."
 if [ -d "\$WORK_TREE/public" ]; then
-  find "\$WORK_TREE/public" -type d -exec sudo chmod 755 {} \;
+  sudo find "\$WORK_TREE/public" -type d -exec chmod 755 {} \;
 fi
 
 if [ -d "\$WORK_TREE/bootstrap/cache" ]; then
@@ -195,14 +195,20 @@ EOL
 if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
-# Shared storage permissions
-if [ -d "$WORK_TREE_BASE_FULL/storage" ]; then
-  sudo chmod -R ug+rwx "$WORK_TREE_BASE_FULL/storage"
-fi
+# Fix permissions for shared storage
+echo "Fixing shared storage permissions..."
+sudo chown -R www-data:www-data "$WORK_TREE_BASE_FULL/storage"
+sudo find "$WORK_TREE_BASE_FULL/storage" -type d -exec chmod 775 {} \; || true
+sudo find "$WORK_TREE_BASE_FULL/storage" -type f -exec chmod 664 {} \; || true
 
 # Link current to this release
 echo "Linking current -> \$WORK_TREE"
 sudo ln -sfn "\$WORK_TREE" "$WORK_TREE_BASE_FULL/current"
+
+# Clean up old releases (keep last 3)
+echo "Cleaning up old releases (keeping last 3)..."
+cd "$WORK_TREE_BASE_FULL/deploys"
+sudo ls -1dt */ | tail -n +4 | xargs -I {} sudo rm -rf "{}"
 
 echo "Done!"
 EOL
