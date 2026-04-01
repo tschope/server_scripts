@@ -35,8 +35,8 @@ echo "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
 echo "Installing base tools..."
-sudo apt install -y build-essential build-essential libpcre3 libpcre3-dev zlib1g-dev libssl-dev \
-libxslt1-dev libgd-dev libgeoip-dev libmaxminddb-dev software-properties-common curl gnupg2 ca-certificates lsb-release unzip
+sudo apt install -y build-essential libpcre3 libpcre3-dev zlib1g-dev libssl-dev \
+  libxslt1-dev libgd-dev libgeoip-dev libmaxminddb-dev software-properties-common curl gnupg2 ca-certificates lsb-release unzip
 
 # Install MySQL
 echo "Installing MySQL..."
@@ -88,8 +88,11 @@ sudo add-apt-repository ppa:ondrej/php -y
 sudo apt update
 
 # Install PHP versions and extensions
-PHP_VERSIONS=("7.4" "8.2" "8.3" "8.4" "8.5")
-PHP_PACKAGES=("cli" "fpm" "common" "mysql" "zip" "gd" "mbstring" "curl" "xml" "bcmath", "imagick")
+echo "Available PHP versions: 7.4, 8.2, 8.3, 8.4, 8.5"
+read -p "Which PHP versions to install? (space-separated) [default: 8.3 8.4]: " PHP_VERSIONS_INPUT
+PHP_VERSIONS_INPUT=${PHP_VERSIONS_INPUT:-"8.3 8.4"}
+PHP_VERSIONS=($PHP_VERSIONS_INPUT)
+PHP_PACKAGES=("cli" "fpm" "common" "mysql" "zip" "gd" "mbstring" "curl" "xml" "bcmath" "intl" "redis" "imagick")
 
 # Install PHP and extensions
 echo "Installing PHP versions and extensions..."
@@ -100,27 +103,30 @@ for version in "${PHP_VERSIONS[@]}"; do
     PACKAGE_LIST+=" php$version-$package"
   done
   sudo apt install -y $PACKAGE_LIST
-	sudo phpenmod -v $version imagick || true
-	sudo systemctl restart php$version-fpm || true
+  sudo phpenmod -v "$version" imagick || true
 
   # Set PHP upload limits
   PHP_INI="/etc/php/$version/fpm/php.ini"
   if [ -f "$PHP_INI" ]; then
     sudo sed -i 's/^upload_max_filesize.*/upload_max_filesize = 25M/' "$PHP_INI"
     sudo sed -i 's/^post_max_size.*/post_max_size = 25M/' "$PHP_INI"
-    sudo systemctl restart php$version-fpm || true
   fi
-	sudo systemctl restart php$version-fpm || true
+
+  sudo systemctl restart "php$version-fpm" || true
 done
 
-# Set PHP 8.3 as default CLI
-echo "Setting PHP 8.3 as default CLI..."
-sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.3 83
-sudo update-alternatives --set php /usr/bin/php8.3
-sudo update-alternatives --set phar /usr/bin/phar8.3
-sudo update-alternatives --set phar.phar /usr/bin/phar.phar8.3
-sudo update-alternatives --set phpize /usr/bin/phpize8.3
-sudo update-alternatives --set php-config /usr/bin/php-config8.3
+# Set default PHP CLI version
+DEFAULT_PHP="${PHP_VERSIONS[0]}"
+read -p "Which PHP version to set as default CLI? [default: $DEFAULT_PHP]: " PHP_CLI_VERSION
+PHP_CLI_VERSION=${PHP_CLI_VERSION:-$DEFAULT_PHP}
+
+echo "Setting PHP $PHP_CLI_VERSION as default CLI..."
+sudo update-alternatives --install /usr/bin/php php "/usr/bin/php$PHP_CLI_VERSION" 100
+sudo update-alternatives --set php "/usr/bin/php$PHP_CLI_VERSION"
+sudo update-alternatives --set phar "/usr/bin/phar$PHP_CLI_VERSION"
+sudo update-alternatives --set phar.phar "/usr/bin/phar.phar$PHP_CLI_VERSION"
+sudo update-alternatives --set phpize "/usr/bin/phpize$PHP_CLI_VERSION"
+sudo update-alternatives --set php-config "/usr/bin/php-config$PHP_CLI_VERSION"
 
 # Set default branch for git
 echo "Setting default branch for git to main..."
@@ -142,16 +148,34 @@ php composer-setup.php --quiet
 rm composer-setup.php
 sudo mv composer.phar /usr/local/bin/composer
 
-# Install Node.js and Supervisor
-echo "Installing Node.js and Supervisor..."
+# Install Node.js
+echo "Installing Node.js..."
 # Add NodeSource repository for Node.js LTS
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 # Install Node.js
 sudo apt-get install -y nodejs
-# Install Supervisor for process management
-sudo apt install -y supervisor
-sudo systemctl enable supervisor
-sudo systemctl start supervisor
+
+# Optionally install Redis
+read -p "Install Redis server? [y/N]: " INSTALL_REDIS
+INSTALL_REDIS=${INSTALL_REDIS:-n}
+
+if [[ "$INSTALL_REDIS" =~ ^[Yy]$ ]]; then
+  echo "Installing Redis..."
+  sudo apt install -y redis-server
+  sudo systemctl enable redis-server
+  sudo systemctl start redis-server
+fi
+
+# Optionally install Supervisor
+read -p "Install Supervisor for process management? [y/N]: " INSTALL_SUPERVISOR
+INSTALL_SUPERVISOR=${INSTALL_SUPERVISOR:-n}
+
+if [[ "$INSTALL_SUPERVISOR" =~ ^[Yy]$ ]]; then
+  echo "Installing Supervisor..."
+  sudo apt install -y supervisor
+  sudo systemctl enable supervisor
+  sudo systemctl start supervisor
+fi
 
 # Install NVM + Node.js (as fallback)
 echo "Installing NVM as fallback..."
