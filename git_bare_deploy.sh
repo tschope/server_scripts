@@ -22,9 +22,10 @@ WORK_TREE_BASE=${WORK_TREE_BASE:-/var/www}
 WORK_TREE_BASE_FULL="$WORK_TREE_BASE/$PROJECT_DOMAIN"
 
 if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
-  DEPLOYS_DIR="$WORK_TREE_BASE_FULL/deploys"
+  RELEASES_DIR="$WORK_TREE_BASE_FULL/releases"
+  SHARED_PATH="$WORK_TREE_BASE_FULL/shared"
   TIMESTAMP=$(date +%Y%m%d%H%M%S)
-  WORK_TREE="$DEPLOYS_DIR/$TIMESTAMP"
+  WORK_TREE="$RELEASES_DIR/$TIMESTAMP"
   CURRENT_LINK="$WORK_TREE_BASE_FULL/current"
 else
   WORK_TREE="$WORK_TREE_BASE_FULL"
@@ -151,12 +152,13 @@ sudo tee "$HOOK_PATH" > /dev/null <<EOL
 
 echo "Start deploy..."
 
-DEPLOYS_DIR="$WORK_TREE_BASE_FULL/deploys"
+RELEASES_DIR="$WORK_TREE_BASE_FULL/releases"
+SHARED_PATH="$WORK_TREE_BASE_FULL/shared"
 CURRENT_LINK="$WORK_TREE_BASE_FULL/current"
 
 if [ "$USE_VERSIONING" = "y" ] || [ "$USE_VERSIONING" = "Y" ]; then
   TIMESTAMP=\$(date +%Y%m%d%H%M%S)
-  WORK_TREE="\$DEPLOYS_DIR/\$TIMESTAMP"
+  WORK_TREE="\$RELEASES_DIR/\$TIMESTAMP"
   sudo mkdir -p "\$WORK_TREE"
 else
   WORK_TREE="$WORK_TREE_BASE_FULL"
@@ -176,37 +178,55 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 
 # Symlink shared .env for versioned deploy
 echo "Linking shared .env..."
-sudo ln -sfn "$WORK_TREE_BASE_FULL/.env" "\$WORK_TREE/.env"
+sudo ln -sfn "$SHARED_PATH/.env" "\$WORK_TREE/.env"
 
 # Symlink shared storage for versioned deploy
 echo "Linking shared storage..."
-if [ ! -d "$WORK_TREE_BASE_FULL/storage" ]; then
-  echo "Shared storage not found. Creating from this release..."
-  sudo mv "\$WORK_TREE/storage" "$WORK_TREE_BASE_FULL/storage"
+if [ ! -d "$SHARED_PATH/storage" ]; then
+  echo "Shared storage not found. Promoting this release's storage to shared/..."
+  sudo mkdir -p "$SHARED_PATH"
+  sudo mv "\$WORK_TREE/storage" "$SHARED_PATH/storage"
 else
   sudo rm -rf "\$WORK_TREE/storage"
 fi
-sudo ln -sfn "$WORK_TREE_BASE_FULL/storage" "\$WORK_TREE/storage"
+sudo ln -sfn "$SHARED_PATH/storage" "\$WORK_TREE/storage"
+
+# Symlink shared bootstrap/cache when available (created by script_domain_generate.sh for Laravel apps)
+if [ -d "$SHARED_PATH/bootstrap/cache" ]; then
+  echo "Linking shared bootstrap/cache..."
+  sudo rm -rf "\$WORK_TREE/bootstrap/cache"
+  sudo ln -sfn "$SHARED_PATH/bootstrap/cache" "\$WORK_TREE/bootstrap/cache"
+fi
 EOL
 fi
 
 # Frontend .env symlink (conditional)
 if [[ "$USE_SUPERVISOR_FRONTEND" =~ ^[Yy]$ ]] && [[ -n "$FRONTEND_ENV_PATH" ]]; then
+  if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
+    FRONTEND_ENV_SOURCE="$SHARED_PATH/.env"
+  else
+    FRONTEND_ENV_SOURCE="$WORK_TREE_BASE_FULL/.env"
+  fi
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
 # Symlink frontend .env
 echo "Linking frontend .env..."
-sudo ln -sfn "$WORK_TREE_BASE_FULL/.env" "\$WORK_TREE$FRONTEND_ENV_PATH/.env"
+sudo ln -sfn "$FRONTEND_ENV_SOURCE" "\$WORK_TREE$FRONTEND_ENV_PATH/.env"
 EOL
 fi
 
 # Public storage symlink (conditional)
 if [[ "$USE_PUBLIC_STORAGE_LINK" =~ ^[Yy]$ ]]; then
+  if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
+    PUBLIC_STORAGE_SOURCE="$SHARED_PATH/storage/app/public"
+  else
+    PUBLIC_STORAGE_SOURCE="$WORK_TREE_BASE_FULL/storage/app/public"
+  fi
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
 # Create public/storage symlink
 echo "Linking public/storage..."
-sudo ln -sfn "$WORK_TREE_BASE_FULL/storage/app/public" "\$WORK_TREE/public/storage"
+sudo ln -sfn "$PUBLIC_STORAGE_SOURCE" "\$WORK_TREE/public/storage"
 EOL
 fi
 
@@ -301,11 +321,16 @@ EOL
 if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
-# Fix permissions for shared storage
+# Fix permissions for shared storage and bootstrap/cache
 echo "Fixing shared storage permissions..."
-sudo chown -R www-data:www-data "$WORK_TREE_BASE_FULL/storage"
-sudo find "$WORK_TREE_BASE_FULL/storage" -type d -exec chmod 775 {} \; || true
-sudo find "$WORK_TREE_BASE_FULL/storage" -type f -exec chmod 664 {} \; || true
+sudo chown -R www-data:www-data "$SHARED_PATH/storage"
+sudo find "$SHARED_PATH/storage" -type d -exec chmod 775 {} \; || true
+sudo find "$SHARED_PATH/storage" -type f -exec chmod 664 {} \; || true
+if [ -d "$SHARED_PATH/bootstrap/cache" ]; then
+  sudo chown -R www-data:www-data "$SHARED_PATH/bootstrap/cache"
+  sudo find "$SHARED_PATH/bootstrap/cache" -type d -exec chmod 775 {} \; || true
+  sudo find "$SHARED_PATH/bootstrap/cache" -type f -exec chmod 664 {} \; || true
+fi
 
 # Link current to this release
 echo "Linking current -> \$WORK_TREE"
@@ -314,7 +339,7 @@ sudo chown -h www-data:www-data "$WORK_TREE_BASE_FULL/current"
 
 # Clean up old releases (keep last 3)
 echo "Cleaning up old releases (keeping last 3)..."
-cd "$WORK_TREE_BASE_FULL/deploys"
+cd "$WORK_TREE_BASE_FULL/releases"
 sudo ls -1dt */ | tail -n +4 | xargs -I {} sudo rm -rf "{}"
 EOL
 else
