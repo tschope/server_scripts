@@ -6,15 +6,30 @@ This repository contains shell scripts for setting up and managing a LEMP (Linux
 
 1. **server_lemp_setup.sh** - Initial server setup with LEMP stack
 2. **script_domain_generate.sh** - Configures Nginx for new domains
-3. **git_bare_deploy.sh** - Sets up Git-based deployment with Supervisor process management
-4. **deploy_at_the_server.sh** - Zero-downtime deploy script with symlink swap
-5. **server_migration.sh** - rsync-based migration from an old server
+3. **script_domain_rollback.sh** - Reverts a domain provisioning (Nginx, web root, cert, MySQL)
+4. **git_bare_deploy.sh** - Sets up Git-based deployment with Supervisor process management
+5. **deploy_at_the_server.sh** - Zero-downtime deploy script with symlink swap
+6. **server_migration.sh** - rsync-based migration from an old server
 
 ## Prerequisites
 
 - Ubuntu/Debian-based Linux server
 - Sudo/root access
 - Basic knowledge of Linux command line
+
+## Updating the Scripts
+
+If you cloned this repo over HTTPS (no push access) and want to pull the latest
+scripts cleanly — discarding any local edits the previous runs may have made:
+
+```bash
+git reset --hard
+git pull origin main
+chmod +x *.sh
+```
+
+> `git reset --hard` drops all uncommitted changes in the working tree. Only run
+> this when you do not have local modifications you want to keep.
 
 ## 1. server_lemp_setup.sh
 
@@ -62,15 +77,41 @@ sudo ./script_domain_generate.sh
 ### What it does:
 1. Asks for PHP version (7.4, 8.2, 8.3, 8.4, or 8.5)
 2. Prompts for domain names (supports multiple domains for one site)
-3. Optionally enables deploy versioning with timestamped folders
-4. Optionally configures Supervisor-managed frontend proxy (e.g. Nuxt)
-5. Supports combined Laravel API + Frontend setup (proxy `/` to Node, route `/api`, `/sanctum`, `/storage`, `/broadcasting` to PHP-FPM)
-6. Sets up webroot directory structure
-7. Creates Nginx server block configuration with security headers
-8. Optionally installs Let's Encrypt SSL certificate
-9. Optionally creates MySQL database and user
+3. Optionally enables deploy versioning with timestamped folders under `releases/`
+4. If versioning is enabled, asks whether the app is **Laravel** — and if so:
+   - Creates the full `shared/storage` tree (`app/public`, `framework/{cache,sessions,views,testing}`, `logs`) and `shared/bootstrap/cache`
+   - Writes a complete Laravel 11/12 base `.env` to `shared/.env` (640 perms)
+   - Sets `www-data:www-data` ownership and 775/664 permissions on storage/cache
+   - Auto-updates `APP_URL` to `https://` after a successful Let's Encrypt cert
+   - Auto-fills `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` after MySQL creation
+5. Optionally configures Supervisor-managed frontend proxy (e.g. Nuxt)
+6. Supports combined Laravel API + Frontend setup (proxy `/` to Node, route `/api`, `/sanctum`, `/storage`, `/broadcasting` to PHP-FPM)
+7. Sets up webroot directory structure
+8. Creates Nginx server block configuration with security headers
+9. Optionally installs Let's Encrypt SSL certificate
+10. Optionally creates MySQL database and user
 
-## 3. git_bare_deploy.sh
+## 3. script_domain_rollback.sh
+
+Reverts everything `script_domain_generate.sh` created for a given domain. Useful when a provisioning run fails midway (e.g. wrong MySQL root password) and you want to start fresh without manually cleaning up Nginx, web root, certs, and the database.
+
+### Usage
+
+```bash
+chmod +x script_domain_rollback.sh
+sudo ./script_domain_rollback.sh
+```
+
+### What it does:
+1. Asks for the main domain and web root base
+2. Shows a preview of every resource that will be inspected
+3. Asks one confirmation per section so you can revert only what failed:
+   - **Nginx** — removes `sites-enabled/<domain>`, `sites-available/<domain>`, optional error log, reloads Nginx only if `nginx -t` passes
+   - **Web root** — `ls -la` preview then `rm -rf /var/www/<domain>` (with confirmation)
+   - **Let's Encrypt** — `certbot delete --cert-name <domain>` (cleans `live/`, `archive/`, `renewal/`) with manual fallback
+   - **MySQL** — validates root credentials with `SELECT 1` before issuing `DROP DATABASE` / `DROP USER` (no half-applied changes)
+
+## 4. git_bare_deploy.sh
 
 This script sets up a Git bare repository with a `post-receive` hook for push-to-deploy, with support for Supervisor-managed processes.
 
@@ -124,7 +165,7 @@ For each enabled service, the script generates Supervisor config files at `/etc/
    git push live main
    ```
 
-## 4. deploy_at_the_server.sh
+## 5. deploy_at_the_server.sh
 
 A concrete zero-downtime deploy script meant to be customized per project. Clones from a Git repo, runs composer/npm, swaps the `current` symlink, and restarts Supervisor processes.
 
@@ -137,7 +178,7 @@ sudo ./deploy_at_the_server.sh
 
 ### What it does:
 1. Clones the repo into a timestamped release folder
-2. Symlinks shared `.env` and storage
+2. Symlinks `shared/.env`, `shared/storage`, and `shared/bootstrap/cache`
 3. Runs `composer install` and `php artisan migrate`
 4. Builds frontend (`npm install && npm run build`)
 5. Fixes permissions for `www-data`
@@ -146,7 +187,7 @@ sudo ./deploy_at_the_server.sh
 8. Reloads Nginx
 9. Cleans up old releases (keeps last 3)
 
-## 5. server_migration.sh
+## 6. server_migration.sh
 
 rsync-based migration script for moving from an old server to a new one.
 
@@ -160,7 +201,8 @@ rsync-based migration script for moving from an old server to a new one.
 
 ## Architecture Patterns
 
-- **Versioned deploys**: Timestamped release folders under `deploys/` with a `current` symlink, plus optional rollback script generation.
+- **Versioned deploys**: Timestamped release folders under `releases/` with a `current` symlink and a sibling `shared/` directory for `.env`, `storage/`, and `bootstrap/cache/`. Optional rollback script generation.
+- **Laravel-aware provisioning**: `script_domain_generate.sh` pre-creates the Laravel `shared/` tree with correct ownership, writes a base `.env`, and auto-fills DB credentials and HTTPS `APP_URL` so the first deploy works without manual permission/configuration fixes.
 - **Combined Laravel + Supervisor frontend**: Nginx proxies `/` to a Supervisor-managed Node app while routing `/api`, `/sanctum`, `/storage`, `/broadcasting` to PHP-FPM.
 - **Deployer user**: `git_bare_deploy.sh` creates a `deployer` system user with passwordless sudo and NVM, used for SSH-based push deploys.
 - **Standard paths**: Web roots at `/var/www/<domain>`, bare repos at `/var/git-bare/<domain>.git`.
