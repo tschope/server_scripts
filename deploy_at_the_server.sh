@@ -17,10 +17,10 @@ mkdir -p "$RELEASES_DIR"
 echo "📦 Cloning repo into new release: $NEW_RELEASE"
 git clone --branch main --depth 1 "$REPO_URL" "$NEW_RELEASE"
 
-# Link .env from base folder
+# Link .env from shared folder
 echo "🔗 Linking .env"
-ln -sfn "$BASE_DIR/.env" "$NEW_RELEASE/.env"
-ln -sfn "$BASE_DIR/.env" "$NEW_RELEASE/frontend/.env"
+ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE/.env"
+ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE/frontend/.env"
 
 # Set the correct PHP version
 echo "🧰 Setting PHP version"
@@ -34,7 +34,9 @@ composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 # Link shared storage folders (before any permission or artisan steps)
 echo "🔗 Linking shared storage"
 rm -rf "$NEW_RELEASE/storage"
+rm -rf "$NEW_RELEASE/bootstrap/cache"
 ln -sfn "$SHARED_DIR/storage" "$NEW_RELEASE/storage"
+ln -sfn "$SHARED_DIR/bootstrap/cache" "$NEW_RELEASE/bootstrap/cache"
 ln -sfn "$SHARED_DIR/storage/app/public" "$NEW_RELEASE/public/storage"
 
 # Run migrations

@@ -58,13 +58,111 @@ ROOT_PATH="$ROOT_BASE/$MAIN_DOMAIN"
 
 if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
   TIMESTAMP=$(date +%Y%m%d%H%M%S)
-  DEPLOYS_PATH="$ROOT_PATH/deploys/$TIMESTAMP"
+  RELEASES_PATH="$ROOT_PATH/releases/$TIMESTAMP"
+  SHARED_PATH="$ROOT_PATH/shared"
   CURRENT_PATH="$ROOT_PATH/current"
   FULL_PATH="$CURRENT_PATH/public"
 
-  echo "Creating initial deploy versioned path and symlink for Nginx to avoid syntax error..."
-  sudo mkdir -p "$DEPLOYS_PATH/public"
-  sudo ln -s "$DEPLOYS_PATH" "$CURRENT_PATH"
+  echo "Creating initial release path and symlink for Nginx to avoid syntax error..."
+  sudo mkdir -p "$RELEASES_PATH/public"
+  sudo ln -s "$RELEASES_PATH" "$CURRENT_PATH"
+
+  # Ask if this is a Laravel application
+  read -p "Is this a Laravel application? (creates shared/storage with correct permissions) [y/N]: " IS_LARAVEL
+  IS_LARAVEL=${IS_LARAVEL:-n}
+
+  if [[ "$IS_LARAVEL" =~ ^[Yy]$ ]]; then
+    echo "Creating Laravel shared/ structure at $SHARED_PATH..."
+    sudo mkdir -p \
+      "$SHARED_PATH/storage/app/public" \
+      "$SHARED_PATH/storage/framework/cache/data" \
+      "$SHARED_PATH/storage/framework/sessions" \
+      "$SHARED_PATH/storage/framework/views" \
+      "$SHARED_PATH/storage/framework/testing" \
+      "$SHARED_PATH/storage/logs" \
+      "$SHARED_PATH/bootstrap/cache"
+
+    # Create base Laravel .env (deploy script will symlink each release to it).
+    # Sensitive values (APP_KEY, DB creds) are filled later or by `php artisan key:generate`.
+    sudo tee "$SHARED_PATH/.env" > /dev/null <<EOF
+APP_NAME=Laravel
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://${MAIN_DOMAIN}
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_FAKER_LOCALE=en_US
+
+APP_MAINTENANCE_DRIVER=file
+APP_MAINTENANCE_STORE=database
+
+BCRYPT_ROUNDS=12
+
+LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_DEPRECATIONS_CHANNEL=null
+LOG_LEVEL=error
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=
+DB_USERNAME=
+DB_PASSWORD=
+
+SESSION_DRIVER=database
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=database
+
+CACHE_STORE=database
+CACHE_PREFIX=
+
+MEMCACHED_HOST=127.0.0.1
+
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+MAIL_MAILER=log
+MAIL_HOST=127.0.0.1
+MAIL_PORT=2525
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=null
+MAIL_FROM_ADDRESS="hello@${MAIN_DOMAIN}"
+MAIL_FROM_NAME="\${APP_NAME}"
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=
+AWS_USE_PATH_STYLE_ENDPOINT=false
+
+VITE_APP_NAME="\${APP_NAME}"
+EOF
+    sudo chmod 640 "$SHARED_PATH/.env"
+
+    # Laravel requires www-data ownership and group-writable storage/cache
+    sudo chown -R www-data:www-data "$SHARED_PATH"
+    sudo find "$SHARED_PATH/storage" "$SHARED_PATH/bootstrap/cache" -type d -exec chmod 775 {} \;
+    sudo find "$SHARED_PATH/storage" "$SHARED_PATH/bootstrap/cache" -type f -exec chmod 664 {} \;
+
+    echo "✅ Laravel shared/ structure created."
+    echo "💡 Your deploy script should symlink:"
+    echo "     <release>/storage         -> $SHARED_PATH/storage"
+    echo "     <release>/public/storage  -> $SHARED_PATH/storage/app/public"
+    echo "     <release>/bootstrap/cache -> $SHARED_PATH/bootstrap/cache"
+    echo "     <release>/.env            -> $SHARED_PATH/.env"
+  fi
 
   # Ask if rollback script should be created
   read -p "Generate rollback.sh script to switch between versions? [y/N]: " CREATE_ROLLBACK
@@ -77,26 +175,26 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 
 set -e
 
-# Prompt user to select version from deploys
-DEPLOYS_DIR="$(dirname "$0")/deploys"
+# Prompt user to select version from releases
+RELEASES_DIR="$(dirname "$0")/releases"
 CURRENT_LINK="$(dirname "$0")/current"
 
-if [ ! -d "$DEPLOYS_DIR" ]; then
-  echo "❌ No 'deploys' directory found at $DEPLOYS_DIR"
+if [ ! -d "$RELEASES_DIR" ]; then
+  echo "❌ No 'releases' directory found at $RELEASES_DIR"
   exit 1
 fi
 
-VERSIONS=($(ls -1 $DEPLOYS_DIR | sort -r))
+VERSIONS=($(ls -1 $RELEASES_DIR | sort -r))
 
 if [ ${#VERSIONS[@]} -eq 0 ]; then
-  echo "❌ No versions found in $DEPLOYS_DIR"
+  echo "❌ No versions found in $RELEASES_DIR"
   exit 1
 fi
 
 echo "Available versions for rollback:"
 select VERSION in "${VERSIONS[@]}"; do
   if [[ -n "$VERSION" ]]; then
-    TARGET="$DEPLOYS_DIR/$VERSION"
+    TARGET="$RELEASES_DIR/$VERSION"
     if [ -d "$TARGET" ]; then
       echo "Rolling back to: $VERSION"
       rm -f "$CURRENT_LINK"
@@ -275,7 +373,13 @@ CONFIGURE_HTTPS=${CONFIGURE_HTTPS:-n}
 if [[ "$CONFIGURE_HTTPS" =~ ^[Yy]$ ]]; then
   # Issue Let's Encrypt certificates
   echo "Issuing Let's Encrypt certificate..."
-  sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")
+  if sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}"); then
+    # Update APP_URL in Laravel shared .env to use HTTPS now that the cert is in place
+    if [[ "$IS_LARAVEL" =~ ^[Yy]$ ]] && [ -f "$SHARED_PATH/.env" ]; then
+      sudo sed -i "s|^APP_URL=.*|APP_URL=https://${MAIN_DOMAIN}|" "$SHARED_PATH/.env"
+      echo "🔧 Updated APP_URL=https://${MAIN_DOMAIN} in $SHARED_PATH/.env"
+    fi
+  fi
 else
   echo "⚠️  HTTPS not configured. Your site is currently HTTP only."
   echo "📝 To configure HTTPS later (after DNS propagation), run:"
@@ -328,7 +432,21 @@ if [[ "$CREATE_DB" =~ ^[Yy]$ ]]; then
   echo "Username: $MYSQL_USER"
   echo "Password: $MYSQL_USER_PWD"
   echo "--------------------------------------------"
-  echo "💡 Copy these credentials into your .env file."
+
+  # Auto-populate DB_* fields in Laravel shared .env when applicable
+  if [[ "$IS_LARAVEL" =~ ^[Yy]$ ]] && [ -f "$SHARED_PATH/.env" ]; then
+    # Escape sed delimiters and special chars in the generated password
+    ESCAPED_PWD=$(printf '%s' "$MYSQL_USER_PWD" | sed -e 's/[\/&|]/\\&/g')
+    sudo sed -i \
+      -e "s|^DB_DATABASE=.*|DB_DATABASE=$MYSQL_DB|" \
+      -e "s|^DB_USERNAME=.*|DB_USERNAME=$MYSQL_USER|" \
+      -e "s|^DB_PASSWORD=.*|DB_PASSWORD=$ESCAPED_PWD|" \
+      "$SHARED_PATH/.env"
+    echo "🔧 Updated DB_DATABASE/USERNAME/PASSWORD in $SHARED_PATH/.env"
+    echo "💡 Run 'php artisan key:generate' from a release to populate APP_KEY."
+  else
+    echo "💡 Copy these credentials into your .env file."
+  fi
 fi
 
 echo
