@@ -115,8 +115,8 @@ if ! grep -q "include /etc/nginx/sites-enabled/\*;" "$NGINX_MAIN_CONF"; then
 fi
 
 if ! grep -q "client_max_body_size" "$NGINX_MAIN_CONF"; then
-  sudo sed -i '/http {/a \\tclient_max_body_size 25M;' "$NGINX_MAIN_CONF"
-  echo "Added 'client_max_body_size 25M' to nginx.conf"
+  sudo sed -i '/http {/a \\tclient_max_body_size 100M;' "$NGINX_MAIN_CONF"
+  echo "Added 'client_max_body_size 100M' to nginx.conf"
 fi
 
 sudo nginx -t
@@ -176,8 +176,8 @@ if $NEED_PHP_INSTALL; then
 
     PHP_INI="/etc/php/$version/fpm/php.ini"
     if [ -f "$PHP_INI" ]; then
-      sudo sed -i 's/^;*upload_max_filesize.*/upload_max_filesize = 25M/' "$PHP_INI"
-      sudo sed -i 's/^;*post_max_size.*/post_max_size = 25M/' "$PHP_INI"
+      sudo sed -i 's/^;*upload_max_filesize.*/upload_max_filesize = 100M/' "$PHP_INI"
+      sudo sed -i 's/^;*post_max_size.*/post_max_size = 100M/' "$PHP_INI"
     fi
 
     sudo systemctl restart "php$version-fpm" || true

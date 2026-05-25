@@ -35,7 +35,7 @@ Collection of Bash shell scripts for provisioning and managing Ubuntu/Debian LEM
 - All scripts use `set -e` (fail on first error).
 - Scripts are fully interactive via `read -p` — no CLI flags or argument parsing.
 - PHP versions supported: 7.4, 8.2, 8.3, 8.4, 8.5. Default CLI is 8.3.
-- Upload limits are set to 25MB in both Nginx (`client_max_body_size`) and PHP FPM (`upload_max_filesize`, `post_max_size`).
+- Upload limits are set to 100MB in both Nginx (`client_max_body_size`) and PHP FPM (`upload_max_filesize`, `post_max_size`).
 - MySQL root password is auto-generated and saved to `/root/mysql_root_password.txt`.
 - Nginx security headers (X-Frame-Options, X-XSS-Protection, X-Content-Type-Options) and deny rules for `.env`, `.ht`, and sensitive directories are included by default.
 
