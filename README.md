@@ -6,7 +6,7 @@ This repository contains shell scripts for setting up and managing a LEMP (Linux
 
 1. **server_lemp_setup.sh** - Initial server setup with LEMP stack
 2. **script_domain_generate.sh** - Configures Nginx for new domains
-3. **script_domain_rollback.sh** - Reverts a domain provisioning (Nginx, web root, cert, MySQL)
+3. **script_domain_rollback.sh** - Reverts a domain provisioning (Nginx, web root, git bare repo, Supervisor, cert, MySQL)
 4. **git_bare_deploy.sh** - Sets up Git-based deployment with Supervisor process management
 5. **deploy_at_the_server.sh** - Zero-downtime deploy script with symlink swap
 6. **server_migration.sh** - rsync-based migration from an old server
@@ -93,7 +93,7 @@ sudo ./script_domain_generate.sh
 
 ## 3. script_domain_rollback.sh
 
-Reverts everything `script_domain_generate.sh` created for a given domain. Useful when a provisioning run fails midway (e.g. wrong MySQL root password) and you want to start fresh without manually cleaning up Nginx, web root, certs, and the database.
+Reverts everything `script_domain_generate.sh` and `git_bare_deploy.sh` created for a given domain. Useful when a provisioning run fails midway (e.g. wrong MySQL root password), or when you want to fully tear down a site to re-provision it with a different Git repo/remote.
 
 ### Usage
 
@@ -108,8 +108,12 @@ sudo ./script_domain_rollback.sh
 3. Asks one confirmation per section so you can revert only what failed:
    - **Nginx** — removes `sites-enabled/<domain>`, `sites-available/<domain>`, optional error log, reloads Nginx only if `nginx -t` passes
    - **Web root** — `ls -la` preview then `rm -rf /var/www/<domain>` (with confirmation)
+   - **Supervisor** — stops and removes any `/etc/supervisor/conf.d/<domain>-*.conf` programs (nuxt, horizon, reverb, schedule), then `supervisorctl reread`/`update`
+   - **Git bare repo** — `rm -rf /var/git-bare/<domain>.git` (with confirmation)
    - **Let's Encrypt** — `certbot delete --cert-name <domain>` (cleans `live/`, `archive/`, `renewal/`) with manual fallback
    - **MySQL** — validates root credentials with `SELECT 1` before issuing `DROP DATABASE` / `DROP USER` (no half-applied changes)
+
+After rollback, re-run `script_domain_generate.sh` and `git_bare_deploy.sh` to recreate the domain from scratch (e.g. pointed at a different GitHub repo).
 
 ## 4. git_bare_deploy.sh
 
