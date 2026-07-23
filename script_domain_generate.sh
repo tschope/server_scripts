@@ -51,6 +51,15 @@ if [[ "$IS_SUPERVISOR_APP" =~ ^[Yy]$ ]]; then
   fi
 fi
 
+# Ask for the app path (for monorepos where the app's public/ isn't at the repo root)
+read -p "Path to the app relative to repo root (where its public/ folder lives, e.g. / or /platform) [default: /]: " APP_PATH
+APP_PATH=${APP_PATH:-/}
+if [[ "$APP_PATH" == "/" ]]; then
+  APP_SUFFIX=""
+else
+  APP_SUFFIX="$APP_PATH"
+fi
+
 # Ask for Nginx root base
 read -p "Enter base path for web root [default: /var/www]: " ROOT_BASE
 ROOT_BASE=${ROOT_BASE:-/var/www}
@@ -61,10 +70,10 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
   RELEASES_PATH="$ROOT_PATH/releases/$TIMESTAMP"
   SHARED_PATH="$ROOT_PATH/shared"
   CURRENT_PATH="$ROOT_PATH/current"
-  FULL_PATH="$CURRENT_PATH/public"
+  FULL_PATH="$CURRENT_PATH$APP_SUFFIX/public"
 
   echo "Creating initial release path and symlink for Nginx to avoid syntax error..."
-  sudo mkdir -p "$RELEASES_PATH/public"
+  sudo mkdir -p "$RELEASES_PATH$APP_SUFFIX/public"
   sudo ln -s "$RELEASES_PATH" "$CURRENT_PATH"
 
   # Ask if this is a Laravel application
@@ -218,7 +227,7 @@ EOF
     echo "✅ Rollback script created at: $ROLLBACK_SCRIPT"
   fi
 else
-  FULL_PATH="$ROOT_PATH/public"
+  FULL_PATH="$ROOT_PATH$APP_SUFFIX/public"
 fi
 
 if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then

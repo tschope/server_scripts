@@ -35,6 +35,10 @@ fi
 read -p "Which branch should be used for deployment? [default: main]: " DEPLOY_BRANCH
 DEPLOY_BRANCH=${DEPLOY_BRANCH:-main}
 
+# Ask for Laravel app path (for monorepos where the app isn't at the repo root)
+read -p "Path to the Laravel app relative to repo root (e.g. / or /platform) [default: /]: " APP_PATH
+APP_PATH=${APP_PATH:-/}
+
 # Ask for deploy options
 read -p "Run composer install? [Y/n]: " COMPOSER_INSTALL
 COMPOSER_INSTALL=${COMPOSER_INSTALL:-y}
@@ -104,6 +108,13 @@ PHP_VERSION=${PHP_VERSION:-8.3}
 # Sanitize domain for Supervisor program names
 SUPERVISOR_NAME="${PROJECT_DOMAIN//[^a-zA-Z0-9]/-}"
 
+# Normalize app path suffix (empty when app is at repo root)
+if [[ "$APP_PATH" == "/" ]]; then
+  APP_SUFFIX=""
+else
+  APP_SUFFIX="$APP_PATH"
+fi
+
 # Ensure deployer user exists
 if id "deployer" &>/dev/null; then
     echo "User 'deployer' already exists."
@@ -170,7 +181,7 @@ sudo chown -R deployer:deployer "\$WORK_TREE"
 sudo git --work-tree=\$WORK_TREE --git-dir=$BARE_REPO_PATH checkout $DEPLOY_BRANCH -f
 sudo chown -R deployer:deployer "\$WORK_TREE"
 
-cd \$WORK_TREE
+cd "\$WORK_TREE$APP_SUFFIX"
 EOL
 
 if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
@@ -178,24 +189,24 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 
 # Symlink shared .env for versioned deploy
 echo "Linking shared .env..."
-sudo ln -sfn "$SHARED_PATH/.env" "\$WORK_TREE/.env"
+sudo ln -sfn "$SHARED_PATH/.env" "\$WORK_TREE$APP_SUFFIX/.env"
 
 # Symlink shared storage for versioned deploy
 echo "Linking shared storage..."
 if [ ! -d "$SHARED_PATH/storage" ]; then
   echo "Shared storage not found. Promoting this release's storage to shared/..."
   sudo mkdir -p "$SHARED_PATH"
-  sudo mv "\$WORK_TREE/storage" "$SHARED_PATH/storage"
+  sudo mv "\$WORK_TREE$APP_SUFFIX/storage" "$SHARED_PATH/storage"
 else
-  sudo rm -rf "\$WORK_TREE/storage"
+  sudo rm -rf "\$WORK_TREE$APP_SUFFIX/storage"
 fi
-sudo ln -sfn "$SHARED_PATH/storage" "\$WORK_TREE/storage"
+sudo ln -sfn "$SHARED_PATH/storage" "\$WORK_TREE$APP_SUFFIX/storage"
 
 # Symlink shared bootstrap/cache when available (created by script_domain_generate.sh for Laravel apps)
 if [ -d "$SHARED_PATH/bootstrap/cache" ]; then
   echo "Linking shared bootstrap/cache..."
-  sudo rm -rf "\$WORK_TREE/bootstrap/cache"
-  sudo ln -sfn "$SHARED_PATH/bootstrap/cache" "\$WORK_TREE/bootstrap/cache"
+  sudo rm -rf "\$WORK_TREE$APP_SUFFIX/bootstrap/cache"
+  sudo ln -sfn "$SHARED_PATH/bootstrap/cache" "\$WORK_TREE$APP_SUFFIX/bootstrap/cache"
 fi
 EOL
 fi
@@ -205,7 +216,7 @@ if [[ "$USE_SUPERVISOR_FRONTEND" =~ ^[Yy]$ ]] && [[ -n "$FRONTEND_ENV_PATH" ]]; 
   if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
     FRONTEND_ENV_SOURCE="$SHARED_PATH/.env"
   else
-    FRONTEND_ENV_SOURCE="$WORK_TREE_BASE_FULL/.env"
+    FRONTEND_ENV_SOURCE="$WORK_TREE_BASE_FULL$APP_SUFFIX/.env"
   fi
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
@@ -220,13 +231,13 @@ if [[ "$USE_PUBLIC_STORAGE_LINK" =~ ^[Yy]$ ]]; then
   if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
     PUBLIC_STORAGE_SOURCE="$SHARED_PATH/storage/app/public"
   else
-    PUBLIC_STORAGE_SOURCE="$WORK_TREE_BASE_FULL/storage/app/public"
+    PUBLIC_STORAGE_SOURCE="$WORK_TREE_BASE_FULL$APP_SUFFIX/storage/app/public"
   fi
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
 # Create public/storage symlink
 echo "Linking public/storage..."
-sudo ln -sfn "$PUBLIC_STORAGE_SOURCE" "\$WORK_TREE/public/storage"
+sudo ln -sfn "$PUBLIC_STORAGE_SOURCE" "\$WORK_TREE$APP_SUFFIX/public/storage"
 EOL
 fi
 
@@ -269,7 +280,7 @@ fi
 
 npm install
 npm run build
-cd "\$WORK_TREE"
+cd "\$WORK_TREE$APP_SUFFIX"
 EOL
 fi
 
@@ -296,7 +307,7 @@ if [[ "$USE_HORIZON" =~ ^[Yy]$ ]] && [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 
 # Terminate Horizon before switching release
 echo "Terminating Horizon..."
-php "$WORK_TREE_BASE_FULL/current/artisan" horizon:terminate 2>/dev/null || true
+php "$WORK_TREE_BASE_FULL/current$APP_SUFFIX/artisan" horizon:terminate 2>/dev/null || true
 sleep 3
 EOL
 fi
@@ -309,12 +320,12 @@ echo "Fixing permissions for www-data..."
 sudo chown -R www-data:www-data "\$WORK_TREE"
 
 echo "Adjusting folder permissions..."
-if [ -d "\$WORK_TREE/public" ]; then
-  sudo find "\$WORK_TREE/public" -type d -exec chmod 755 {} \;
+if [ -d "\$WORK_TREE$APP_SUFFIX/public" ]; then
+  sudo find "\$WORK_TREE$APP_SUFFIX/public" -type d -exec chmod 755 {} \;
 fi
 
-if [ -d "\$WORK_TREE/bootstrap/cache" ]; then
-  sudo chmod -R ug+rwx "\$WORK_TREE/bootstrap/cache"
+if [ -d "\$WORK_TREE$APP_SUFFIX/bootstrap/cache" ]; then
+  sudo chmod -R ug+rwx "\$WORK_TREE$APP_SUFFIX/bootstrap/cache"
 fi
 EOL
 
@@ -345,8 +356,8 @@ EOL
 else
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
-if [ -d "\$WORK_TREE/storage" ]; then
-  sudo chmod -R ug+rwx "\$WORK_TREE/storage"
+if [ -d "\$WORK_TREE$APP_SUFFIX/storage" ]; then
+  sudo chmod -R ug+rwx "\$WORK_TREE$APP_SUFFIX/storage"
 fi
 EOL
 fi
@@ -397,6 +408,8 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
 else
   SUPERVISOR_WORK_DIR="$WORK_TREE_BASE_FULL"
 fi
+# Laravel commands (Horizon, Reverb, schedule:work) run from the app path
+SUPERVISOR_APP_DIR="$SUPERVISOR_WORK_DIR$APP_SUFFIX"
 
 if [[ "$USE_SUPERVISOR_FRONTEND" =~ ^[Yy]$ ]]; then
   NUXT_DIR="$SUPERVISOR_WORK_DIR"
@@ -426,7 +439,7 @@ if [[ "$USE_HORIZON" =~ ^[Yy]$ ]]; then
   sudo tee "/etc/supervisor/conf.d/${SUPERVISOR_NAME}-horizon.conf" > /dev/null <<SCONF
 [program:${SUPERVISOR_NAME}-horizon]
 command=php artisan horizon
-directory=${SUPERVISOR_WORK_DIR}
+directory=${SUPERVISOR_APP_DIR}
 user=www-data
 autostart=true
 autorestart=true
@@ -443,7 +456,7 @@ if [[ "$USE_REVERB" =~ ^[Yy]$ ]]; then
   sudo tee "/etc/supervisor/conf.d/${SUPERVISOR_NAME}-reverb.conf" > /dev/null <<SCONF
 [program:${SUPERVISOR_NAME}-reverb]
 command=php artisan reverb:start --port=${REVERB_PORT}
-directory=${SUPERVISOR_WORK_DIR}
+directory=${SUPERVISOR_APP_DIR}
 user=www-data
 autostart=true
 autorestart=true
@@ -459,7 +472,7 @@ if [[ "$USE_SCHEDULE" =~ ^[Yy]$ ]]; then
   sudo tee "/etc/supervisor/conf.d/${SUPERVISOR_NAME}-schedule.conf" > /dev/null <<SCONF
 [program:${SUPERVISOR_NAME}-schedule]
 command=php artisan schedule:work
-directory=${SUPERVISOR_WORK_DIR}
+directory=${SUPERVISOR_APP_DIR}
 user=www-data
 autostart=true
 autorestart=true
