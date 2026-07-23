@@ -144,6 +144,9 @@ EOF
     echo "NVM and Node.js installed for deployer."
 fi
 
+# Ensure deployer can write to www-data-owned shared storage/cache during deploy
+sudo usermod -aG www-data deployer
+
 # Create bare repo
 BARE_REPO_PATH="/var/git-bare/${PROJECT_DOMAIN}.git"
 echo "Creating bare Git repo at $BARE_REPO_PATH..."
