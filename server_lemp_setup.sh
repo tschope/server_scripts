@@ -79,7 +79,8 @@ if command -v mysql &>/dev/null; then
 else
   echo "Installing MySQL..."
   sudo apt install -y mysql-server
-  MYSQL_ROOT_PASSWORD=$(openssl rand -base64 16)
+  # Suffix guarantees upper/lower/digit/special so MySQL validate_password (MEDIUM) accepts it
+  MYSQL_ROOT_PASSWORD="$(openssl rand -base64 16)Aa1!"
 
   echo "Configuring MySQL root password..."
   sudo mysql <<EOF

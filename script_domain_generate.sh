@@ -412,7 +412,8 @@ if [[ "$CREATE_DB" =~ ^[Yy]$ ]]; then
   read -s -p "Enter password for MySQL user (leave empty to auto-generate): " MYSQL_USER_PWD
   echo
   if [ -z "$MYSQL_USER_PWD" ]; then
-    MYSQL_USER_PWD=$(openssl rand -base64 12)
+    # Suffix guarantees upper/lower/digit/special so MySQL validate_password (MEDIUM) accepts it
+    MYSQL_USER_PWD="$(openssl rand -base64 12)Aa1!"
     echo "Generated MySQL user password: $MYSQL_USER_PWD"
   fi
 
@@ -430,7 +431,9 @@ if [[ "$CREATE_DB" =~ ^[Yy]$ ]]; then
 
   # Execute SQL
   mysql -u root -p"$MYSQL_ROOT_PWD" -e "$SQL" || {
-    echo "❌ Failed to create MySQL user/database. Please check your root password."
+    echo "❌ Failed to create MySQL user/database."
+    echo "   Check the root password, or the password policy (ERROR 1819):"
+    echo "   the user password needs upper+lower+digit+special and 8+ chars."
     exit 1
   }
 
