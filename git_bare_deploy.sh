@@ -249,12 +249,34 @@ if [[ "$COMPOSER_INSTALL" =~ ^[Yy]$ ]]; then
 echo "Running composer install..."
 composer install --no-dev --optimize-autoloader --no-interaction
 EOL
+else
+  # A skipped step has to say so in the hook itself. Otherwise nobody reading it later can
+  # tell a deliberate omission from something that got lost, and they will assume the former.
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+# composer install is deliberately NOT run by this hook (answered "n" when it was generated).
+# Dependency changes therefore need \\`composer install --no-dev\\` by hand after a deploy.
+EOL
 fi
 
 if [[ "$RUN_MIGRATIONS" =~ ^[Yy]$ ]]; then
   sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 echo "Running migrations..."
 php artisan migrate --force
+EOL
+else
+  # This omission is the expensive one: the deploy succeeds, the code is new, the schema is
+  # old, and the failure surfaces later as whatever a missing column happens to break.
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+# ==============================================================================
+# MIGRATIONS ARE DELIBERATELY NOT RUN BY THIS HOOK
+# (answered "n" when it was generated).
+#
+# A deploy carrying a migration will therefore ship code against the old schema
+# and fail in whatever way the missing column fails. Run this by hand, and check
+# \\`php artisan migrate:status\\` before assuming a deploy is complete:
+#
+#     php artisan migrate --force
+# ==============================================================================
 EOL
 fi
 
@@ -285,6 +307,10 @@ npm install
 npm run build
 cd "\$WORK_TREE$APP_SUFFIX"
 EOL
+else
+  sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
+# The frontend is deliberately NOT built by this hook (answered "n" when it was generated).
+EOL
 fi
 
 # Vendor publish (conditional)
@@ -296,9 +322,15 @@ echo "Running vendor:publish --tag=$VENDOR_PUBLISH_TAG..."
 php artisan vendor:publish --tag=$VENDOR_PUBLISH_TAG --force
 EOL
   else
+    # No tag means every publishable asset of every package, config files included — and
+    # --force overwrites. On an app with hand-tuned config/*.php that is a live grenade, so
+    # the hook says so rather than looking like a routine step.
     sudo tee -a "$HOOK_PATH" > /dev/null <<EOL
 
-echo "Running vendor:publish..."
+# WARNING: no tag was given, so this publishes everything every package offers and --force
+# overwrites it, config/*.php included. If this app has tuned config files, give a tag
+# instead (e.g. --tag=log-viewer-assets) and regenerate this hook.
+echo "Running vendor:publish (untagged)..."
 php artisan vendor:publish --force
 EOL
   fi
@@ -494,6 +526,44 @@ if [[ "$USE_SUPERVISOR_FRONTEND" =~ ^[Yy]$ ]] || [[ "$USE_HORIZON" =~ ^[Yy]$ ]] 
   sudo supervisorctl reread
   sudo supervisorctl update
 fi
+
+# What this hook will and will not do. Printed because the prompts above default to sensible
+# answers, and a single "n" can leave a pipeline that looks complete but is not — skipping
+# migrations once cost a production outage that took hours to trace back to this script.
+echo
+echo "=============================================================="
+echo " Deploy hook summary"
+echo "=============================================================="
+summary_line() { # $1 = answer, $2 = label
+  if [[ "$1" =~ ^[Yy]$ ]]; then echo "  [x] $2"; else echo "  [ ] $2  (SKIPPED)"; fi
+}
+summary_line "$COMPOSER_INSTALL" "composer install"
+summary_line "$RUN_MIGRATIONS" "php artisan migrate --force"
+summary_line "$RUN_NPM" "npm install && npm run build"
+summary_line "$RUN_VENDOR_PUBLISH" "php artisan vendor:publish"
+
+if ! [[ "$RUN_MIGRATIONS" =~ ^[Yy]$ ]]; then
+  echo
+  echo "  !! MIGRATIONS WILL NOT RUN ON DEPLOY."
+  echo "     Deploying a migration will ship code against the old schema. Run"
+  echo "     'php artisan migrate --force' by hand, and check 'migrate:status'"
+  echo "     before assuming a deploy is complete."
+fi
+
+if [[ "$RUN_VENDOR_PUBLISH" =~ ^[Yy]$ ]] && [[ -z "$VENDOR_PUBLISH_TAG" ]]; then
+  echo
+  echo "  !! vendor:publish has no tag, so it publishes everything with --force"
+  echo "     and will overwrite published config files. Give a tag unless you"
+  echo "     really mean all of it."
+fi
+
+if [[ "$USE_REVERB" =~ ^[Yy]$ ]]; then
+  echo
+  echo "  !! Reverb: a supervisor program was created running 'artisan reverb:start'."
+  echo "     If laravel/reverb is not actually installed it will crash-loop and fill"
+  echo "     the log with 'no commands defined in the reverb namespace'."
+fi
+echo "=============================================================="
 
 # Final SSH remote URL
 echo
