@@ -10,6 +10,8 @@ This repository contains shell scripts for setting up and managing a LEMP (Linux
 4. **git_bare_deploy.sh** - Sets up Git-based deployment with Supervisor process management
 5. **deploy_at_the_server.sh** - Zero-downtime deploy script with symlink swap
 6. **server_migration.sh** - rsync-based migration from an old server
+7. **hestia_setup.sh** - Installs Hestia Control Panel on a clean server, for multi-client hosting with plans (alternative to the manual LEMP stack above — do not mix the two)
+8. **redis_client_add.sh** - Grants one Hestia client an ACL-isolated Redis account
 
 ## Prerequisites
 

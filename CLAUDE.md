@@ -23,6 +23,8 @@ Collection of Bash shell scripts for provisioning and managing Ubuntu/Debian LEM
 | `git_bare_deploy.sh` | Create a bare Git repo with a `post-receive` hook for push-to-deploy (supports composer, artisan migrations, npm build, NVM, Supervisor, Horizon, Reverb, schedule:work, optional versioned deploys) |
 | `deploy_at_the_server.sh` | Concrete zero-downtime deploy script (clone, composer, artisan migrate, npm build, symlink swap, Supervisor restart, keeps last 3 releases) |
 | `server_migration.sh` | rsync-based migration from old server (web files, git-bare repos, Nginx configs, Let's Encrypt certs, MySQL dump, TeamSpeak) |
+| `hestia_setup.sh` | Install Hestia Control Panel on a **clean** server (wraps the official installer: collects flags up front, OS check, clean-server guard, plus Composer/Node.js/Redis which Hestia does not ship). Mutually exclusive with `server_lemp_setup.sh`. |
+| `redis_client_add.sh` | Grant one Hestia client a Redis account isolated by ACL key/channel prefix. Requires `hestia_setup.sh` to have installed Redis. |
 
 ## Architecture Patterns
 
