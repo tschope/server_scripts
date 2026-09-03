@@ -82,6 +82,9 @@ REVERB_PORT=""
 if [[ "$USE_REVERB" =~ ^[Yy]$ ]]; then
   read -p "Enter Reverb port [default: 24678]: " REVERB_PORT
   REVERB_PORT=${REVERB_PORT:-24678}
+  echo "     Note: this script does not write .env -- it only symlinks it. You must set"
+  echo "     REVERB_SERVER_PORT=$REVERB_PORT there yourself. reverb:start reads that value, and"
+  echo "     so does the port the app publishes events to, so it is the one source of truth."
 fi
 
 # Schedule worker
@@ -490,7 +493,11 @@ fi
 if [[ "$USE_REVERB" =~ ^[Yy]$ ]]; then
   sudo tee "/etc/supervisor/conf.d/${SUPERVISOR_NAME}-reverb.conf" > /dev/null <<SCONF
 [program:${SUPERVISOR_NAME}-reverb]
-command=php artisan reverb:start --port=${REVERB_PORT}
+# No --port flag on purpose. reverb:start reads REVERB_SERVER_PORT from the app's .env, which
+# is also the port the app publishes events to. Pinning it here as well gives two sources of
+# truth, and when they disagree the symptom is a websocket that never connects with nothing in
+# any log -- the backend publishes to one port while the server listens on the other.
+command=php artisan reverb:start
 directory=${SUPERVISOR_APP_DIR}
 user=www-data
 autostart=true
@@ -562,6 +569,20 @@ if [[ "$USE_REVERB" =~ ^[Yy]$ ]]; then
   echo "  !! Reverb: a supervisor program was created running 'artisan reverb:start'."
   echo "     If laravel/reverb is not actually installed it will crash-loop and fill"
   echo "     the log with 'no commands defined in the reverb namespace'."
+  echo "     Two things this script cannot do for you, and both fail silently:"
+  echo "       1. Set REVERB_SERVER_PORT=$REVERB_PORT in $SHARED_PATH/.env. The command"
+  echo "          above carries no --port, so .env is what decides."
+  echo "       2. Proxy the websocket in nginx. Reverb speaks the Pusher protocol, so the"
+  echo "          browser connects to /app/{key} on 443 and nginx has to forward it:"
+  echo "            location ^~ /app/ {"
+  echo "                proxy_pass http://127.0.0.1:$REVERB_PORT;"
+  echo "                proxy_http_version 1.1;"
+  echo "                proxy_set_header Upgrade \$http_upgrade;"
+  echo "                proxy_set_header Connection \"upgrade\";"
+  echo "                proxy_set_header Host \$host;"
+  echo "                proxy_read_timeout 3600;"
+  echo "            }"
+  echo "          Without it the socket never connects and nothing is logged anywhere."
 fi
 echo "=============================================================="
 
