@@ -290,15 +290,15 @@ if [[ "$IS_COMBINED" =~ ^[Yy]$ ]]; then
     }
 
     location ^~ /storage/ {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
     location ^~ /broadcasting {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
     location / {
-        proxy_pass http://localhost:${APP_PORT};
+        proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -315,7 +315,7 @@ elif [[ "$IS_SUPERVISOR_APP" =~ ^[Yy]$ ]]; then
   sudo tee -a "$NGINX_CONF" > /dev/null <<EOF
 
     location / {
-        proxy_pass http://localhost:${APP_PORT};
+        proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
