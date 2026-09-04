@@ -166,6 +166,9 @@ HOOK_PATH="$BARE_REPO_PATH/hooks/post-receive"
 echo "Generating post-receive hook..."
 sudo tee "$HOOK_PATH" > /dev/null <<EOL
 #!/bin/sh
+# Abort on the first failing step. The "current" symlink swap and the Supervisor
+# restart are near the end, so a failed build leaves the previous release serving.
+set -e
 
 echo "Start deploy..."
 
@@ -289,7 +292,8 @@ echo "Installing JS dependencies and building frontend..."
 cd "\$WORK_TREE$FRONTEND_PATH"
 
 export NVM_DIR="/home/deployer/.nvm"
-[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+# Returns 1 when nvm.sh is absent; not a deploy failure, so do not trip set -e.
+[ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh" || true
 
 NODE_VERSION=""
 if [ -f "package.json" ]; then
