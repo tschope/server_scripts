@@ -91,12 +91,19 @@ if [[ "$USE_VERSIONING" =~ ^[Yy]$ ]]; then
       "$SHARED_PATH/storage/logs" \
       "$SHARED_PATH/bootstrap/cache"
 
+    # Generate APP_KEY here rather than leaving it for `php artisan key:generate`.
+    # artisan does not exist yet at provisioning time — no release has been
+    # deployed — and an empty APP_KEY makes the first deploy fail on the initial
+    # `artisan migrate`. This is the same value key:generate would produce: the
+    # base64 of 32 random bytes, for the default AES-256-CBC cipher.
+    APP_KEY_GENERATED="base64:$(openssl rand -base64 32)"
+
     # Create base Laravel .env (deploy script will symlink each release to it).
-    # Sensitive values (APP_KEY, DB creds) are filled later or by `php artisan key:generate`.
+    # DB creds are filled in later, by the MySQL step below.
     sudo tee "$SHARED_PATH/.env" > /dev/null <<EOF
 APP_NAME=Laravel
 APP_ENV=production
-APP_KEY=
+APP_KEY=${APP_KEY_GENERATED}
 APP_DEBUG=false
 APP_URL=http://${MAIN_DOMAIN}
 
@@ -393,6 +400,14 @@ else
   echo "⚠️  HTTPS not configured. Your site is currently HTTP only."
   echo "📝 To configure HTTPS later (after DNS propagation), run:"
   echo "   sudo certbot --nginx $(printf -- '-d %s ' "${DOMAINS[@]}")"
+  # APP_URL is only rewritten on the inline certbot path above, so the deferred
+  # path has to carry its own instruction — otherwise APP_URL stays http:// and
+  # Laravel signs verification and password-reset URLs over the wrong scheme,
+  # which then break once the site is served over HTTPS.
+  if [[ "$IS_LARAVEL" =~ ^[Yy]$ ]] && [ -n "$SHARED_PATH" ]; then
+    echo "   Then update APP_URL to match, or signed URLs will break:"
+    echo "   sudo sed -i 's|^APP_URL=.*|APP_URL=https://${MAIN_DOMAIN}|' $SHARED_PATH/.env"
+  fi
   echo ""
 fi
 
@@ -455,7 +470,7 @@ if [[ "$CREATE_DB" =~ ^[Yy]$ ]]; then
       -e "s|^DB_PASSWORD=.*|DB_PASSWORD=$ESCAPED_PWD|" \
       "$SHARED_PATH/.env"
     echo "🔧 Updated DB_DATABASE/USERNAME/PASSWORD in $SHARED_PATH/.env"
-    echo "💡 Run 'php artisan key:generate' from a release to populate APP_KEY."
+    echo "💡 APP_KEY was already generated when $SHARED_PATH/.env was created."
   else
     echo "💡 Copy these credentials into your .env file."
   fi

@@ -83,8 +83,13 @@ sudo ./script_domain_generate.sh
 4. If versioning is enabled, asks whether the app is **Laravel** — and if so:
    - Creates the full `shared/storage` tree (`app/public`, `framework/{cache,sessions,views,testing}`, `logs`) and `shared/bootstrap/cache`
    - Writes a complete Laravel 11/12 base `.env` to `shared/.env` (640 perms)
+   - Generates `APP_KEY` up front, so the first deploy's `artisan migrate` works
+     without a manual `key:generate` (`artisan` does not exist yet at this point)
    - Sets `www-data:www-data` ownership and 775/664 permissions on storage/cache
-   - Auto-updates `APP_URL` to `https://` after a successful Let's Encrypt cert
+   - Auto-updates `APP_URL` to `https://` after a successful Let's Encrypt cert.
+     If you defer HTTPS, this does **not** run — the script prints the `sed` to
+     apply yourself, and skipping it leaves Laravel signing verification and
+     password-reset URLs over `http://`, which break once the site is on HTTPS
    - Auto-fills `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` after MySQL creation
 5. Optionally configures Supervisor-managed frontend proxy (e.g. Nuxt)
 6. Supports combined Laravel API + Frontend setup (proxy `/` to Node, route `/api`, `/sanctum`, `/storage`, `/broadcasting` to PHP-FPM)
